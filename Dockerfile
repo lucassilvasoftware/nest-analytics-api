@@ -7,7 +7,7 @@ COPY ./.env.production ./.env
 
 RUN npm install --quiet --no-optional --no-found --loglevel=error
 
-RUN npm build
+RUN npm run build
 
 EXPOSE 3000
 
