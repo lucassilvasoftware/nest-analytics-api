@@ -3,7 +3,7 @@ import * as XLSX from 'xlsx';
 
 @Injectable()
 export class SheetService {
-    sendSheet(): any[]{ 
-        return [];
+    sendSheet(): string{ 
+        return "Retorno API!";
     }
 }
