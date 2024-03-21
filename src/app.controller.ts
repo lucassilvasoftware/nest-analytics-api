@@ -1,9 +1,9 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, HttpCode } from '@nestjs/common';
 
 @Controller()
 export class AppController {
   @Get()
   getHello(): string {
-    return String(process.env.NODE_ENV);
+    return JSON.stringify({ message:"Welcome to API!", environment: process.env.NODE_ENV });
   }
 }
