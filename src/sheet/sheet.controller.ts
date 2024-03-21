@@ -4,7 +4,7 @@ import { SheetService } from './sheet.service';
 
 @Controller('sheets')
 export class SheetController {
-    constructor(private sheetService: SheetService) {}
+    constructor(private sheetService: SheetService) { }
 
     @Post('send')
     @UseInterceptors(FileInterceptor('file'))
