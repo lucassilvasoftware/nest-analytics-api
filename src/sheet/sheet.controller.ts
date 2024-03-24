@@ -13,7 +13,8 @@ export class SheetController {
             const processedData = await this.sheetService.processSheetData(file.buffer);
             return processedData;
         } catch (error) {
-            throw new Error('Error processing uploaded file');
+            console.error('Error processing uploaded file:', error);
+            throw new Error('Erro ao processar o arquivo enviado. Por favor, verifique se o formato do arquivo está correto e tente novamente.');
         }
     }
 }

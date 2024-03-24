@@ -1,210 +1,110 @@
 import { Injectable } from '@nestjs/common';
 import * as XLSX from 'xlsx';
+import { differenceInCalendarDays, parseISO } from 'date-fns';
 
 interface SheetEntry {
     status: string;
     dataCancelamento?: string;
     valor?: number;
-    dataInicio?: Date;
-    dataStatus?: Date;
+    dataInicio?: string;
+    dataStatus?: string;
 }
 
 @Injectable()
 export class SheetService {
     async processSheetData(fileBuffer: Buffer): Promise<any> {
-        try {
-            const data = this.readSheetData(fileBuffer);
+        const data = this.readSheetData(fileBuffer);
 
-            const churnRate = this.calculateChurnByMonth(data);
-            const ltv = this.calculateLTV(data).toFixed(2);
-            const mrr = this.calculateMRR(data).toFixed(2);
-            const averageSL = this.calculateAverageSubscriptionLength(data);
-            const activeUsers = this.activeUsers(data);
+        const mrr = this.calculateMRR(data);
+        const churnRate = this.calculateChurnRate(data);
+        const ltv = this.calculateLTV(data, mrr, churnRate);
+        const averageSubscriptionLength = this.calculateAverageSubscriptionLength(data);
+        const activeUsers = this.countActiveUsers(data);
 
-            // Objeto JSON com as chaves e valores desejados
-            const result = {
-                mrr: mrr,
-                churnRate: churnRate,
-                ltv: ltv,
-                averageSubscriptionLength: averageSL + " dias",
-                activeUsers: activeUsers
-            };
-
-            return result;
-        } catch (error) {
-            throw new Error('Erro ao processar o arquivo enviado. Por favor, verifique se o formato do arquivo está correto e tente novamente.');
-        }
+        return {
+            mrr: mrr.toFixed(2),
+            churnRate: (churnRate * 100).toFixed(2) + '%',
+            ltv: ltv.toFixed(2),
+            averageSubscriptionLength: `${averageSubscriptionLength} days`,
+            activeUsers: activeUsers,
+        };
     }
 
+    private normalizeKey(key: string): string {
+        return key
+            .normalize("NFD") 
+            .replace(/[\u0300-\u036f]/g, "") 
+            .toLowerCase() 
+            .split(' ') 
+            .map((word, index) =>
+                index === 0 ? word : word.charAt(0).toUpperCase() + word.slice(1) 
+            )
+            .join(''); 
+    }
+
+    private transformKeysToCamelCaseWithoutAccents(obj: { [key: string]: any }): { [key: string]: any } {
+        const newObj: { [key: string]: any } = {};
+
+        Object.entries(obj).forEach(([key, value]) => {
+            const normalizedKey = this.normalizeKey(key);
+            newObj[normalizedKey] = value;
+        });
+
+        return newObj;
+    }
 
     readSheetData(fileBuffer: Buffer): SheetEntry[] {
-        try {
-            const workbook = XLSX.read(fileBuffer);
-            const sheetName = workbook.SheetNames[0];
-            const sheet = workbook.Sheets[sheetName];
-            const jsonData = XLSX.utils.sheet_to_json(sheet) as any[];
+        const workbook = XLSX.read(fileBuffer);
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        let jsonData = XLSX.utils.sheet_to_json(sheet, { raw: false }) as any[];
 
-            const removeAccents = (str: string) => {
-                return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-            };
+        jsonData = jsonData.map(this.transformKeysToCamelCaseWithoutAccents.bind(this));
 
-            const parseDate = (value: string | number) => {
-                if (typeof value === 'string') {
-                    // Verifica se o valor é uma string no formato de data/hora
-                    const dateRegex = /^\d{1,2}\/\d{1,2}\/\d{2,4} \d{1,2}:\d{1,2}$/;
-                    if (dateRegex.test(value)) {
-                        return new Date(value);
-                    }
-                } else if (typeof value === 'number') {
-                    // Verifica se o valor é um número representando uma data serial do Excel
-                    const referenceDate = new Date('1900-01-01');
-                    const milliseconds = value * 24 * 60 * 60 * 1000;
-                    return new Date(referenceDate.getTime() + milliseconds);
-                }
-
-                throw new Error('Formato de data inválido.');
-            };
-
-
-            const mappedData = jsonData.map(entry => {
-                const mappedEntry: Partial<SheetEntry> = {};
-
-                for (const key in entry) {
-                    if (entry.hasOwnProperty(key)) {
-                        let value = entry[key];
-                        if (key.includes('data')) {
-                            value = parseDate(value);
-                        }
-                        const newKey = removeAccents(key)
-                            .split(' ')
-                            .map((word, index) => index === 0 ? word.toLowerCase() : word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-                            .join('');
-                        mappedEntry[newKey] = value;
-                    }
-                }
-                return mappedEntry as SheetEntry;
-            });
-
-            return mappedData;
-        } catch (error) {
-            throw new Error('Erro ao ler os dados da planilha. Certifique-se de que o arquivo enviado está no formato correto.');
-        }
+        return jsonData as SheetEntry[];
     }
-
     calculateMRR(data: SheetEntry[]): number {
-        let totalClientesPagantes = 0;
-        let receitaTotal = 0;
-
-        for (const entry of data) {
-            if (entry.status === 'Ativa') {
-                totalClientesPagantes++;
-                receitaTotal += entry.valor || 0;
-            }
-        }
-
-        const ARPU = receitaTotal / totalClientesPagantes;
-        const MRR = ARPU * totalClientesPagantes;
-
-        return MRR;
-    }
-
-    calculateAverageSubscriptionLength(data: SheetEntry[]): number {
-        let totalDuration = 0;
-
-        for (const entry of data) {
-            if (entry.dataInicio) {
-                const startDate = entry.dataInicio;
-                const endDate = entry.dataCancelamento ? new Date(entry.dataCancelamento) : new Date(); // Se não houver data de cancelamento, usa a data atual
-                const duration = (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24); // Duração em dias
-                totalDuration += duration;
-            }
-        }
-
-        if (data.length === 0) {
-            return 0; // Se não houver dados de assinatura, retorna 0 para evitar divisão por zero
-        }
-
-        const averageSubscriptionLength = Math.round(totalDuration / data.length); // Calcula a média do tempo de assinatura em dias
-        return averageSubscriptionLength;
-    }
-
-    calculateLTV(data: SheetEntry[]): number {
-        const totalRevenue = this.calculateTotalRevenue(data);
-        const totalCustomers = this.calculateTotalCustomers(data);
-        const churnRate = this.calculateChurnRate(data);
-
-        const ARPU = totalRevenue / totalCustomers;
-        const lifetime = 1 / churnRate;
-        const LTV = ARPU * lifetime;
-
-        return LTV;
-    }
-
-    calculateTotalRevenue(data: SheetEntry[]): number {
-        let totalRevenue = 0;
-
-        for (const entry of data) {
-            if (entry.status === 'Ativa') {
-                totalRevenue += entry.valor || 0;
-            }
-        }
-
-        return totalRevenue;
-    }
-
-    calculateTotalCustomers(data: SheetEntry[]): number {
-        let totalCustomers = 0;
-
-        for (const entry of data) {
-            if (entry.status === 'Ativa') {
-                totalCustomers++;
-            }
-        }
-
-        return totalCustomers;
+        return data
+            .filter(entry => entry.status === 'Ativa' && entry.valor)
+            .reduce((sum, { valor }) => sum + parseFloat(valor!.toString()), 0);
     }
 
     calculateChurnRate(data: SheetEntry[]): number {
-        let totalCustomers = 0;
-        let churnedCustomers = 0;
-
-        for (const entry of data) {
-            if (entry.status === 'Cancelada' || entry.status === 'Trial cancelado') {
-                churnedCustomers++;
-            } else if (entry.status === 'Ativa') {
-                totalCustomers++;
-            }
-        }
-
-        const churnRate = churnedCustomers / totalCustomers;
-        return churnRate;
+        const totalCustomers = data.length;
+        const churnedCustomers = data.filter(({ status }) => status === 'Cancelada').length;
+        return totalCustomers ? churnedCustomers / totalCustomers : 0;
     }
 
-    activeUsers(data: SheetEntry[]): number {
-        return data.filter(entry => entry.status === 'Ativa').length;
+    calculateLTV(data: SheetEntry[], mrr: number, churnRate: number): number {
+        if (churnRate === 0) return 0;
+        const averageRevenuePerUser = mrr / this.countActiveUsers(data);
+        return averageRevenuePerUser / churnRate;
     }
 
-    calculateChurnByMonth(data: SheetEntry[]): { [monthYear: string]: number } {
-        const churnByMonth: { [monthYear: string]: number } = {};
+    calculateAverageSubscriptionLength(data: SheetEntry[]): string {
+        let totalDays = 0;
+        let count = 0;
 
-        for (const entry of data) {
-            const status = entry.status;
-            const cancelDate = entry.dataCancelamento;
+        data.forEach(entry => {
+            if (entry.status === 'Ativa') {
+                const startDate = new Date(entry.dataInicio);
+                const endDate = entry.dataCancelamento ? new Date(entry.dataCancelamento) : new Date();
 
-            if (status === 'Cancelada' && cancelDate || status === "Trial cancelado" && cancelDate) {
-                const cancelDateObj = new Date(cancelDate);
-                const monthYear = `${cancelDateObj.getFullYear()}-${(
-                    cancelDateObj.getMonth() + 1
-                ).toString().padStart(2, '0')}`;
-
-                if (churnByMonth[monthYear]) {
-                    churnByMonth[monthYear]++;
-                } else {
-                    churnByMonth[monthYear] = 1;
+                if (startDate <= endDate) {
+                    totalDays += differenceInCalendarDays(endDate, startDate);
                 }
-            }
-        }
 
-        return churnByMonth;
+                count++;
+            }
+        });
+
+        if (count === 0) return "0 days";
+
+        const averageDays = totalDays / count;
+        return `${averageDays.toFixed(0)} days`;
+    }
+
+    countActiveUsers(data: SheetEntry[]): number {
+        return data.filter(({ status }) => status === 'Ativa').length;
     }
 }
