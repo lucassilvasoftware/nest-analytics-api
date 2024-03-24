@@ -20,26 +20,40 @@ export class SheetService {
         const ltv = this.calculateLTV(data, mrr, churnRate);
         const averageSubscriptionLength = this.calculateAverageSubscriptionLength(data);
         const activeUsers = this.countActiveUsers(data);
+        const newUsersByMonth = this.calculateNewUsersByMonth(data);
 
         return {
             mrr: mrr.toFixed(2),
             churnRate: (churnRate * 100).toFixed(2) + '%',
             ltv: ltv.toFixed(2),
-            averageSubscriptionLength: `${averageSubscriptionLength} days`,
+            averageSubscriptionLength: `${averageSubscriptionLength}`,
             activeUsers: activeUsers,
+            newUsersByMonth: newUsersByMonth
         };
     }
 
     private normalizeKey(key: string): string {
         return key
-            .normalize("NFD") 
-            .replace(/[\u0300-\u036f]/g, "") 
-            .toLowerCase() 
-            .split(' ') 
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .toLowerCase()
+            .split(' ')
             .map((word, index) =>
-                index === 0 ? word : word.charAt(0).toUpperCase() + word.slice(1) 
+                index === 0 ? word : word.charAt(0).toUpperCase() + word.slice(1)
             )
-            .join(''); 
+            .join('');
+    }
+
+    calculateNewUsersByMonth(data: SheetEntry[]): { [key: string]: number } {
+        const newUsersByMonth: { [key: string]: number } = {};
+        data.forEach(entry => {
+            if (entry.dataInicio) {
+                const date = new Date(entry.dataInicio);
+                const monthYear = `${date.getMonth() + 1}-${date.getFullYear()}`;
+                newUsersByMonth[monthYear] = (newUsersByMonth[monthYear] || 0) + 1;
+            }
+        });
+        return newUsersByMonth;
     }
 
     private transformKeysToCamelCaseWithoutAccents(obj: { [key: string]: any }): { [key: string]: any } {
