@@ -1,25 +1,21 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="200" alt="Nest Logo" /></a>
-</p>
-> Status: Finished ✅
+# Backend — análise (NestJS)
+
+API **NestJS** que expõe serviços para o projeto de análise de dados: leitura e processamento de planilhas (por exemplo **XLSX**), integração com configuração via `@nestjs/config`, pronta para consumo pelo frontend correspondente.
 
 ## Requisitos
 
-- Node.js;
-- Nest.js;
+- Node.js (LTS recomendado)
+- npm ou yarn
 
-## Como rodar o projeto:
+## Como executar
 
-## Instalar
-
-```bash
-$ npm install
-```
-
-## Rodar no modo desenvolvimento
+Na raiz do projeto:
 
 ```bash
-# development
-$ npm run dev
+npm install
+npm run dev
 ```
-Com isso o servidor será aberto no localhost:3000
+
+O servidor HTTP sobe em modo desenvolvimento com recarregamento (watch). A porta padrão do Nest costuma ser **3000**; confira o log do terminal ou `src/main.ts` se houver outra configuração.
+
+Outros scripts úteis: `npm run build`, `npm run start:prod`, testes com `npm run test`.
