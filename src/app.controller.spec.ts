@@ -15,8 +15,9 @@ describe('AppController', () => {
   });
 
   describe('root', () => {
-    it('should return "Hello World!"', () => {
-      expect(appController.getHello()).toBe('Hello World!');
+    it('should return a welcome payload', () => {
+      const body = JSON.parse(appController.getHello());
+      expect(body.message).toBe('Welcome to API!');
     });
   });
 });
